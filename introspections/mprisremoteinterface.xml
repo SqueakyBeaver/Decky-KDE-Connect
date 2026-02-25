@@ -1,0 +1,26 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.mprisremote">
+    <property name="volume" type="i" access="readwrite"/>
+    <property name="length" type="i" access="read"/>
+    <property name="isPlaying" type="b" access="read"/>
+    <property name="position" type="i" access="readwrite"/>
+    <property name="playerList" type="as" access="read"/>
+    <property name="player" type="s" access="readwrite"/>
+    <property name="title" type="s" access="read"/>
+    <property name="artist" type="s" access="read"/>
+    <property name="album" type="s" access="read"/>
+    <property name="localAlbumArtUrl" type="s" access="read"/>
+    <property name="canSeek" type="b" access="read"/>
+    <signal name="propertiesChanged">
+    </signal>
+    <method name="seek">
+      <arg name="offset" type="i" direction="in"/>
+    </method>
+    <method name="requestPlayerList">
+    </method>
+    <method name="sendAction">
+      <arg name="action" type="s" direction="in"/>
+    </method>
+  </interface>
+</node>

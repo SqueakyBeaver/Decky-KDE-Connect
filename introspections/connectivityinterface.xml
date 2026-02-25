@@ -1,0 +1,11 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.connectivity_report">
+    <property name="cellularNetworkType" type="s" access="read"/>
+    <property name="cellularNetworkStrength" type="i" access="read"/>
+    <signal name="refreshed">
+      <arg name="cellularNetworkType" type="s" direction="out"/>
+      <arg name="cellularNetworkStrength" type="i" direction="out"/>
+    </signal>
+  </interface>
+</node>

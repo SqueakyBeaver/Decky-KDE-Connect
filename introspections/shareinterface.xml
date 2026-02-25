@@ -1,0 +1,20 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.share">
+    <signal name="shareReceived">
+      <arg name="url" type="s" direction="out"/>
+    </signal>
+    <method name="shareUrl">
+      <arg name="url" type="s" direction="in"/>
+    </method>
+    <method name="shareUrls">
+      <arg name="urls" type="as" direction="in"/>
+    </method>
+    <method name="shareText">
+      <arg name="text" type="s" direction="in"/>
+    </method>
+    <method name="openFile">
+      <arg name="file" type="s" direction="in"/>
+    </method>
+  </interface>
+</node>

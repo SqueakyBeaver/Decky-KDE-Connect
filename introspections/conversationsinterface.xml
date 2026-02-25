@@ -1,0 +1,46 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.conversations">
+    <signal name="conversationCreated">
+      <arg name="msg" type="v" direction="out"/>
+    </signal>
+    <signal name="conversationRemoved">
+      <arg name="conversationID" type="x" direction="out"/>
+    </signal>
+    <signal name="conversationUpdated">
+      <arg name="msg" type="v" direction="out"/>
+    </signal>
+    <signal name="conversationLoaded">
+      <arg name="conversationID" type="x" direction="out"/>
+      <arg name="messageCount" type="t" direction="out"/>
+    </signal>
+    <signal name="attachmentReceived">
+      <arg name="filePath" type="s" direction="out"/>
+      <arg name="fileName" type="s" direction="out"/>
+    </signal>
+    <method name="activeConversations">
+      <arg type="av" direction="out"/>
+    </method>
+    <method name="requestConversation">
+      <arg name="conversationID" type="x" direction="in"/>
+      <arg name="start" type="i" direction="in"/>
+      <arg name="end" type="i" direction="in"/>
+    </method>
+    <method name="replyToConversation">
+      <arg name="conversationID" type="x" direction="in"/>
+      <arg name="message" type="s" direction="in"/>
+      <arg name="attachmentUrls" type="av" direction="in"/>
+    </method>
+    <method name="sendWithoutConversation">
+      <arg name="addressList" type="av" direction="in"/>
+      <arg name="message" type="s" direction="in"/>
+      <arg name="attachmentUrls" type="av" direction="in"/>
+    </method>
+    <method name="requestAllConversationThreads">
+    </method>
+    <method name="requestAttachmentFile">
+      <arg name="partID" type="x" direction="in"/>
+      <arg name="uniqueIdentifier" type="s" direction="in"/>
+    </method>
+  </interface>
+</node>

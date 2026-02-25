@@ -1,0 +1,40 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.sms">
+    <method name="sendSms">
+      <arg name="addresses" type="av" direction="in"/>
+      <arg name="textMessage" type="s" direction="in"/>
+      <arg name="attachmentUrls" type="av" direction="in"/>
+      <arg name="subID" type="x" direction="in"/>
+    </method>
+    <method name="sendSms">
+      <arg name="addresses" type="av" direction="in"/>
+      <arg name="textMessage" type="s" direction="in"/>
+      <arg name="attachmentUrls" type="av" direction="in"/>
+    </method>
+    <method name="requestAllConversations">
+    </method>
+    <method name="requestConversation">
+      <arg name="conversationID" type="x" direction="in"/>
+      <arg name="rangeStartTimestamp" type="x" direction="in"/>
+      <arg name="numberToRequest" type="x" direction="in"/>
+    </method>
+    <method name="requestConversation">
+      <arg name="conversationID" type="x" direction="in"/>
+      <arg name="rangeStartTimestamp" type="x" direction="in"/>
+    </method>
+    <method name="requestConversation">
+      <arg name="conversationID" type="x" direction="in"/>
+    </method>
+    <method name="launchApp">
+    </method>
+    <method name="requestAttachment">
+      <arg name="partID" type="x" direction="in"/>
+      <arg name="uniqueIdentifier" type="s" direction="in"/>
+    </method>
+    <method name="getAttachment">
+      <arg name="partID" type="x" direction="in"/>
+      <arg name="uniqueIdentifier" type="s" direction="in"/>
+    </method>
+  </interface>
+</node>

@@ -1,0 +1,16 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.remotecommands">
+    <property name="commands" type="ay" access="read"/>
+    <property name="deviceId" type="s" access="read"/>
+    <property name="canAddCommand" type="b" access="read"/>
+    <signal name="commandsChanged">
+      <arg name="commands" type="ay" direction="out"/>
+    </signal>
+    <method name="triggerCommand">
+      <arg name="key" type="s" direction="in"/>
+    </method>
+    <method name="editCommands">
+    </method>
+  </interface>
+</node>

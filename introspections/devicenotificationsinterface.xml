@@ -1,0 +1,27 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.notifications">
+    <signal name="notificationPosted">
+      <arg name="publicId" type="s" direction="out"/>
+    </signal>
+    <signal name="notificationRemoved">
+      <arg name="publicId" type="s" direction="out"/>
+    </signal>
+    <signal name="notificationUpdated">
+      <arg name="publicId" type="s" direction="out"/>
+    </signal>
+    <signal name="allNotificationsRemoved">
+    </signal>
+    <method name="activeNotifications">
+      <arg type="as" direction="out"/>
+    </method>
+    <method name="sendReply">
+      <arg name="replyId" type="s" direction="in"/>
+      <arg name="message" type="s" direction="in"/>
+    </method>
+    <method name="sendAction">
+      <arg name="key" type="s" direction="in"/>
+      <arg name="action" type="s" direction="in"/>
+    </method>
+  </interface>
+</node>

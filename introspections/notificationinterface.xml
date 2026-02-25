@@ -1,0 +1,39 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.notifications.notification">
+    <property name="internalId" type="s" access="read"/>
+    <property name="appName" type="s" access="read"/>
+    <property name="ticker" type="s" access="read"/>
+    <property name="title" type="s" access="read"/>
+    <property name="text" type="s" access="read"/>
+    <property name="groupName" type="s" access="read"/>
+    <property name="isConversation" type="b" access="read"/>
+    <property name="isGroupConversation" type="b" access="read"/>
+    <property name="iconPath" type="s" access="read"/>
+    <property name="dismissable" type="b" access="read"/>
+    <property name="hasIcon" type="b" access="read"/>
+    <property name="silent" type="b" access="read"/>
+    <property name="replyId" type="s" access="read"/>
+    <signal name="dismissRequested">
+      <arg name="m_internalId" type="s" direction="out"/>
+    </signal>
+    <signal name="replyRequested">
+    </signal>
+    <signal name="ready">
+    </signal>
+    <signal name="actionTriggered">
+      <arg name="key" type="s" direction="out"/>
+      <arg name="action" type="s" direction="out"/>
+    </signal>
+    <signal name="replied">
+      <arg name="message" type="s" direction="out"/>
+    </signal>
+    <method name="dismiss">
+    </method>
+    <method name="reply">
+    </method>
+    <method name="sendReply">
+      <arg name="message" type="s" direction="in"/>
+    </method>
+  </interface>
+</node>

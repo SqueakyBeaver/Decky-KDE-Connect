@@ -1,0 +1,32 @@
+<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+<node>
+  <interface name="org.kde.kdeconnect.device.sftp">
+    <signal name="mounted">
+    </signal>
+    <signal name="unmounted">
+    </signal>
+    <method name="startBrowsing">
+      <arg type="b" direction="out"/>
+    </method>
+    <method name="mount">
+    </method>
+    <method name="unmount">
+    </method>
+    <method name="mountAndWait">
+      <arg type="b" direction="out"/>
+    </method>
+    <method name="isMounted">
+      <arg type="b" direction="out"/>
+    </method>
+    <method name="getMountError">
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="mountPoint">
+      <arg type="s" direction="out"/>
+    </method>
+    <method name="getDirectories">
+      <arg type="a{sv}" direction="out"/>
+      <annotation name="org.qtproject.QtDBus.QtTypeName.Out0" value="QVariantMap"/>
+    </method>
+  </interface>
+</node>
