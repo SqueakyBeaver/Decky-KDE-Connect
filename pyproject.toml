@@ -1,3 +1,7 @@
-[tool.pyright]
-include = [
-    ".",]
+[project.optional-dependencies]
+dev = ["basedpyright"]
+
+[tool.basedpyright]
+include = ["."]
+extraPaths = ["py_modules/", "decky-loader/backend/decky_loader/plugin/imports"]
+typeCheckingMode = "standard"
