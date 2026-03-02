@@ -39,6 +39,8 @@
               nodejs
               nodePackages.pnpm
               yarn
+              python313
+              basedpyright
             ];
           };
         }
