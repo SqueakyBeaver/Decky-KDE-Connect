@@ -1,33 +1,12 @@
-from enum import Enum
 from typing import Any
 
-
-class Types(Enum):
-    INVALID = "\0"
-    BYTE = "y"
-    BOOLEAN = "b"
-    INT16 = "n"
-    UINT16 = "q"
-    INT32 = "i"
-    UINT32 = "u"
-    INT64 = "x"
-    UINT64 = "t"
-    DOUBLE = "d"
-    STRING = "s"
-    OBJECT_PATH = "o"
-    SIGNATURE = "g"
-    ARRAY = "a"
-    STRUCT = "("
-    STRUCT_END = ")"
-    VARIANT = "v"
-    DICT_ENTRY = "{"
-    DICT_ENTRY_END = "}"
-    UNIX_FD = "h"
+from dbus.signatures import Array, DBusType, SignatureTree, Struct
 
 
 class Marshaller:
     def __init__(self, signature: str, data: list[Any]):
-        self.signature = signature
+        self.sig_str = signature
+        self.sig_tree = SignatureTree(signature)
         self.data = data
         self.buf = bytearray()
 
@@ -44,22 +23,36 @@ class Marshaller:
 
         self.buf.extend([0] * offset)
 
-    _types = {
-        Types.BYTE: (1,),
-        Types.BOOLEAN: (4,),
-        Types.INT16: (2,),
-        Types.UINT16: (2,),
-        Types.INT32: (4,),
-        Types.UINT32: (4,),
-        Types.INT64: (8,),
-        Types.UINT64: (8,),
-        Types.DOUBLE: (8,),
-        Types.STRING: (4,),
-        Types.OBJECT_PATH: (4,),
-        Types.SIGNATURE: (1,),
-        Types.ARRAY: (4,),
-        Types.STRUCT: (8,),
-        Types.VARIANT: (1,),
-        Types.DICT_ENTRY: (8,),
-        Types.UNIX_FD: (4,),
-    }
+    def marshall(self):
+        """
+        Marshall the data in the form of the signature given when creating this object
+
+        :raises TypeError: The type of the data did not match the signature
+        """
+        self._marshall(self.data, self.sig_tree.children)
+
+    def _marshall(self, data: list[Any], signature: list[DBusType]):
+        """
+        Marshall the data in the form of the signature given when creating this object
+
+        :raises TypeError: The type of the data did not match the signature
+        """
+        for val, sig in zip(data, signature):
+            if not sig.is_valid(val):
+                raise TypeError(
+                    f"<{type(val)} ({val})> is not a compatible type for {repr(sig)}"
+                )
+
+            # FIXME: Do some recursive bullshit
+            if isinstance(sig, Array):
+                self.buf.extend(len(val).to_bytes(4))
+                self.align(sig.contents.align)
+
+            self.align(sig.align)
+            self.buf.append(val)
+
+    def _marshall_arr(self, array_data: list[Any], array_signature: Array):
+        pass
+
+    def _marshall_struct(self, struct_data: tuple[Any], struct_signature: Struct):
+        pass
