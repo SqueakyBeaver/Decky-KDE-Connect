@@ -1,8 +1,17 @@
 from dataclasses import dataclass, field
-from enum import Enum, Flag, IntEnum
+from enum import Flag, IntEnum
 from typing import Any
 
-from dbus.signatures import DBusType, ObjectPath, Signature, String, UInt32, Variant
+from dbus.signatures import (
+    Byte,
+    DBusType,
+    Dictionary,
+    ObjectPath,
+    Signature,
+    String,
+    UInt32,
+    Variant,
+)
 
 
 class MessageType(IntEnum):
@@ -20,7 +29,7 @@ class MessageFlag(Flag):
     ALLOW_INTERACTIVE_AUTHORIZATION = 0x4
 
 
-class HeaderField(Enum):
+class HeaderField(IntEnum):
     INVALID = 0
     PATH = 1
     INTERFACE = 2
@@ -54,12 +63,16 @@ class MessageHeader:
     protocol = 1
     msg_length: int
     serial: int
-    header_fields: dict[HeaderField, Any]
+    header_fields: dict[HeaderField, tuple[DBusType, Any]]
 
-    buffer = bytearray()
+    buffer: bytearray = field(default_factory=bytearray)
 
     def align(self, n: int):
-        self.buffer += b"\0" * (n - len(self.buffer) % n)
+        offset = n - len(self.buffer) % n
+        if offset == 0 or offset == n:
+            return
+
+        self.buffer += b"\0" * offset
 
     def marshall(self):
         self.buffer = bytearray(
@@ -68,14 +81,14 @@ class MessageHeader:
                 self.msg_type.value,
                 self.flags.value,
                 self.protocol,
-                self.msg_length,
-                self.serial,
             ]
         )
 
-        for header_field, data in self.header_fields.items():
-            self.buffer += header_field.value.to_bytes()
-            self.buffer += HEADER_FIELD_TYPES[header_field].pack(data)
+        self.buffer += self.msg_length.to_bytes(4) + self.serial.to_bytes(4)
+
+        self.buffer += Dictionary(Byte(), Variant(), pad_arr_length=False).pack(
+            self.header_fields
+        )
 
         self.align(8)
 
@@ -86,14 +99,19 @@ class MessageBody:
     sig_str: str = field(init=False)
     data: list[Any]
 
-    buffer = bytearray()
+    buffer: bytearray = field(default_factory=bytearray)
 
     def __post_init__(self):
+        self.sig_str = ""
         for i in self.signature:
             self.sig_str += i.to_dbus_str()
 
     def align(self, n: int):
-        self.buffer += b"\0" * (n - len(self.buffer) % n)
+        offset = n - len(self.buffer) % n
+        if offset == 0 or offset == n:
+            return
+
+        self.buffer += b"\0" * offset
 
     def marshall(self):
         for sig, data in zip(self.signature, self.data):
@@ -101,9 +119,13 @@ class MessageBody:
             self.buffer += sig.pack(data)
 
 
+_serial = 1
+
+
 class Message:
     def __init__(
         self,
+        *,
         type: MessageType,
         bus_name: str,
         obj_path: str,
@@ -122,18 +144,16 @@ class Message:
         :param member: The method name or signal name
         :param args: List of arguments that will make up the body of the message
         """
+        global _serial
+
         self.message_type = type
         self.obj_path = obj_path
         self.interface = interface
         self.member = member
         self.bus_name = bus_name
-        self.serial = 17
+        self.serial = _serial
+        _serial += 1
         self.body = MessageBody(signature, data)
-
-        # The signature of the header is:
-        # "yyyyuua(yv)"
-        # Written out more readably, this is:
-        # BYTE, BYTE, BYTE, BYTE, UINT32, UINT32, ARRAY of STRUCT of (BYTE,VARIANT)
 
     def get_bytes(self):
         """
@@ -152,11 +172,11 @@ class Message:
             len(self.body.buffer),
             self.serial,
             {
-                HeaderField.PATH: self.obj_path,
-                HeaderField.INTERFACE: self.interface,
-                HeaderField.MEMBER: self.member,
-                HeaderField.DESTINATION: self.bus_name,
-                HeaderField.SIGNATURE: self.body.sig_str,
+                HeaderField.PATH: (ObjectPath(), self.obj_path),
+                HeaderField.INTERFACE: (String(), self.interface),
+                HeaderField.MEMBER: (String(), self.member),
+                HeaderField.DESTINATION: (String(), self.bus_name),
+                HeaderField.SIGNATURE: (Signature(), self.body.sig_str),
             },
         )
         self.header.marshall()

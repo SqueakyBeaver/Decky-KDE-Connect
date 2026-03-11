@@ -6,12 +6,17 @@ def align_buf[T: bytearray | bytes](buf: T, n: int):
     :param n: The boundary to align to
     :returns: Copy of the aligned buffer
     """
-    return buf + b"\0" * (n - len(buf) % n)
+    offset = n - len(buf) % n
+    if offset == 0 or offset == n:
+        return buf
+
+    return buf + b"\0" * offset
+
 
 def marshall_str(s: str, align: int) -> bytes:
     """
     Marshall a string
-    
+
     :param s: The string to marshall
     :param align: The alignment of the string
     """

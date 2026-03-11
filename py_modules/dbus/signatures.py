@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from struct import Struct as CStruct
 from typing import Any, override
 
-from utils import align_buf, marshall_str
+from .utils import align_buf, marshall_str
 
 
 class DBusType(ABC):
@@ -221,6 +221,9 @@ class Array[T: DBusType](DBusContainerType, list):
 
         return bytes(align_buf(len(buf).to_bytes(4), self.align_elem) + buf)
 
+    def is_valid(self, val):
+        return True
+
     def to_dbus_str(self) -> str:
         return f"a{self.elem_type.dbus_code}"
 
@@ -228,15 +231,15 @@ class Array[T: DBusType](DBusContainerType, list):
         return f"<Array [{self.elem_type}]>"
 
 
-class Struct[*T](DBusContainerType):
+class Struct(DBusContainerType):
     dbus_code = "("
     end_dbus_code = ")"
     align = 8
 
-    def __init__(self, *contents: *T):
+    def __init__(self, *contents: DBusType):
         self.contents = contents
-        self.packers = [c.pack for c in contents]  # type: ignore
-        self.child_align = tuple([i.size for i in contents])  # type: ignore
+        self.packers = [c.pack for c in contents]
+        self.child_align = tuple([i.align for i in contents])  # type: ignore
 
     def is_valid(self, val: Any) -> bool:
         # TODO: Check type (I'm lazy)
@@ -263,7 +266,13 @@ class Variant[T: DBusType](DBusContainerType):
     type: T
     signature: str
 
-    def __init__(self, type: T):
+    def __init__(self, type: T | None = None):
+
+        if type:
+            self.type = type
+            self.signature = type.to_dbus_str()
+
+    def set_type(self, type: T):
         self.type = type
         self.signature = type.to_dbus_str()
 
@@ -271,10 +280,16 @@ class Variant[T: DBusType](DBusContainerType):
         return True  # I don't care enough to check tbh
 
     def pack(self, data: Any) -> bytes:
-        return bytes(
-            align_buf(marshall_str(self.signature, 1), self.type.align)
+        if isinstance(data, tuple) and isinstance(data[0], DBusType):
+            t, data = data
+            self.set_type(t)
+
+        buf = bytes(
+            marshall_str(self.signature, 1)
             + self.type.pack(data)
         )
+
+        return buf
 
     def to_dbus_str(self) -> str:
         return self.dbus_code
@@ -291,9 +306,16 @@ class Dictionary(DBusContainerType):
     key: DBusBasicType
     value: DBusType
 
-    def __init__(self, k_type: DBusBasicType, v_type: DBusType):
+    def __init__(
+        self,
+        k_type: DBusBasicType,
+        v_type: DBusType,
+        *,
+        pad_arr_length: bool = True,
+    ):
         self.key = k_type
         self.value = v_type
+        self.pad_arr_length = pad_arr_length
         self.pack_elem = Struct(k_type, v_type).pack
 
     def is_valid(self, val: dict[Any, Any]) -> bool:
@@ -304,10 +326,13 @@ class Dictionary(DBusContainerType):
     def pack(self, data: dict[Any, Any]) -> bytes:
         buf = bytearray()
 
-        for k, v in data:
+        for k, v in data.items():
+            buf = align_buf(buf, 8)
             buf += self.pack_elem((k, v))
 
-        return bytes(len(buf).to_bytes(4) + b"\0\0\0\0" + buf)
+        return bytes(
+            len(buf).to_bytes(4) + (b"\0\0\0\0" if self.pad_arr_length else b"") + buf
+        )
 
     def to_dbus_str(self) -> str:
         return f"a{{{self.key.dbus_code}{self.value.dbus_code}}}"

@@ -1,8 +1,38 @@
 import asyncio
 import os
 from io import BufferedRWPair
-from socket import AF_UNIX, SOCK_STREAM, socket
+from socket import socket
 from typing import Callable
+
+from dbus.connection import get_connection
+from dbus.message import Message, MessageType
+from dbus.signatures import Int32, String, Struct
+
+
+def dbus_method(func: Callable):
+    def wrapper(*args, **kwargs):
+        func(*args, **kwargs)
+
+    return wrapper
+
+
+# mpris_remote
+# <method name="seek">
+#   <arg name="offset" type="i" direction="in"/>
+# </method>
+
+
+def seek(offset: Int32):
+    pass
+    msg = Message(
+        type=MessageType.METHOD_CALL,
+        bus_name="org.kde.kdeconnect",
+        obj_path="/modules/kdeconnect/devices/9fb8a57bfe364db18670ec0460d0f711/mprisremote",
+        interface="org.kde.kdeconnect.device.mprisremote",
+        member="seek",
+        signature=[Int32()],
+        data=[offset],
+    )
 
 
 class DBusInterface:
@@ -10,8 +40,9 @@ class DBusInterface:
     A DBus Interface tailored to the KDEConnect bus
     """
 
-    def __init__(self):
+    def __init__(self, name: str):
         self._bus_name = "org.kde.kdeconnect"
+        self._interface_name = name
         self._session_bus_path = f"/run/user/{os.getuid()}/bus"
 
         self._sock: socket | None
@@ -20,7 +51,7 @@ class DBusInterface:
 
         self._loop = asyncio.get_event_loop()
 
-        self._connect()
+        self._conn = get_connection()
 
     def _get_object_path(self, device_id: str, interface: str):
         """
@@ -35,28 +66,45 @@ class DBusInterface:
 
         return f"/modules/kdeconnect/devices/{device_id}{module}"
 
-    def _connect(self):
-        """
-        Connect to the session bus
-        """
-        self._sock = socket(AF_UNIX, SOCK_STREAM)
-        self._stream = self._sock.makefile("rwb")
-        self._fd = self._sock.fileno()
-
-        self._sock.connect(self._session_bus_path)
-        self._sock.setblocking(False)
-
-    def get(self, device_id: str, interface: str, property: str):
+    def _get(self, device_id: str, property: str):
         """
         Get a property of a given interface
 
         :param device_id: The id of the device that is given by KDEConnect (i.e. "9fb8a57bfe364db18670ec0460d0f711")
-        :param interface: The name of the interface (i.e. "org.kde.kdeconnect.device.battery")
         :param property: The name of the propert (i.e. "charge")
         """
-        obj_path = self._get_object_path(device_id, interface)
+        obj_path = self._get_object_path(device_id, self._interface_name)
+        msg = Message(
+            type=MessageType.METHOD_CALL,
+            bus_name=self._bus_name,
+            obj_path=obj_path,
+            interface="org.freedesktop.DBus.Properties",
+            member="Get",
+            signature=[String(), String()],
+            data=[self._interface_name, property],
+        )
+        
+        res = self._conn.send(msg)
+        return res
 
-    def subscribe(self, interface: str, signal: str, callback: Callable):
+    def _get_all(self, device_id: str):
+        obj_path = self._get_object_path(device_id, self._interface_name)
+        msg = Message(
+            type=MessageType.METHOD_CALL,
+            bus_name=self._bus_name,
+            obj_path=obj_path,
+            interface="org.freedesktop.DBus.Properties",
+            member="GetAll",
+            signature=[String()],
+            data=[self._interface_name],
+        )
+
+        res = self._conn.send(msg)
+        return res
+
+
+
+    def _subscribe(self, interface: str, signal: str, callback: Callable):
         """
         Subscribe to a signal on a given interface
 
