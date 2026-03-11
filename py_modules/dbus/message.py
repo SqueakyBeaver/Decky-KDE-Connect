@@ -57,7 +57,7 @@ HEADER_FIELD_TYPES = {
 
 @dataclass
 class MessageHeader:
-    endianness = ord("B")
+    endianness = ord("l")
     msg_type: MessageType
     flags: MessageFlag
     protocol = 1
@@ -84,7 +84,7 @@ class MessageHeader:
             ]
         )
 
-        self.buffer += self.msg_length.to_bytes(4) + self.serial.to_bytes(4)
+        self.buffer += self.msg_length.to_bytes(4, "little") + self.serial.to_bytes(4, "little")
 
         self.buffer += Dictionary(Byte(), Variant(), pad_arr_length=False).pack(
             self.header_fields

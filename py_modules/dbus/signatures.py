@@ -51,7 +51,7 @@ class DBusBasicType(DBusType):
 
 class DBusNumericType(DBusBasicType):
     struct_code: str
-    _packer = CStruct(">B")
+    _packer = CStruct("<B")
 
     def pack(self, data: int):
         return self._packer.pack(data)
@@ -80,7 +80,7 @@ class Byte(DBusNumericType):
     dbus_code = "y"
     align = 1
     _value: int
-    _packer = CStruct(">B")
+    _packer = CStruct("<B")
 
     @override
     def is_valid(self, val: Any):
@@ -91,7 +91,7 @@ class Boolean(DBusNumericType):
     dbus_code = "b"
     align = 4
     _value: bool | int
-    _packer = CStruct(">I")
+    _packer = CStruct("<I")
 
     def is_valid(self, val: Any):
         return isinstance(val, int) and (val == 1 or val == 0)
@@ -101,7 +101,7 @@ class Int16(DBusNumericType):
     dbus_code = "n"
     align = 2
     _value: int
-    _packer = CStruct(">h")
+    _packer = CStruct("<h")
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, int) and val.bit_length() <= 16
@@ -111,7 +111,7 @@ class UInt16(DBusNumericType):
     dbus_code = "q"
     align = 2
     _value: int
-    _packer = CStruct(">H")
+    _packer = CStruct("<H")
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, int) and val.bit_length() <= 16 and val > 0
@@ -121,7 +121,7 @@ class Int32(DBusNumericType):
     dbus_code = "i"
     align = 4
     _value: int
-    _packer = CStruct(">i")
+    _packer = CStruct("<i")
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, int) and val.bit_length() <= 32
@@ -131,7 +131,7 @@ class UInt32(DBusNumericType):
     dbus_code = "u"
     align = 4
     _value: int
-    _packer = CStruct(">I")
+    _packer = CStruct("<I")
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, int) and val.bit_length() <= 32 and val > 0
@@ -141,7 +141,7 @@ class Int64(DBusNumericType):
     dbus_code = "x"
     align = 8
     _value: int
-    _packer = CStruct(">q")
+    _packer = CStruct("<q")
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, int) and val.bit_length() <= 64
@@ -151,7 +151,7 @@ class UInt64(DBusNumericType):
     dbus_code = "t"
     align = 8
     _value: int
-    _packer = CStruct(">Q")
+    _packer = CStruct("<Q")
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, int) and val.bit_length() <= 64 and val > 0
@@ -161,7 +161,7 @@ class Double(DBusNumericType):
     dbus_code = "d"
     align = 8
     _value: float
-    _packer = CStruct(">d")
+    _packer = CStruct("<d")
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, float) or isinstance(val, int)
@@ -219,7 +219,7 @@ class Array[T: DBusType](DBusContainerType, list):
         for i in data:
             buf += self.pack_elem(i)
 
-        return bytes(align_buf(len(buf).to_bytes(4), self.align_elem) + buf)
+        return bytes(align_buf(len(buf).to_bytes(4, "little"), self.align_elem) + buf)
 
     def is_valid(self, val):
         return True
@@ -331,7 +331,7 @@ class Dictionary(DBusContainerType):
             buf += self.pack_elem((k, v))
 
         return bytes(
-            len(buf).to_bytes(4) + (b"\0\0\0\0" if self.pad_arr_length else b"") + buf
+            len(buf).to_bytes(4, "little") + (b"\0\0\0\0" if self.pad_arr_length else b"") + buf
         )
 
     def to_dbus_str(self) -> str:

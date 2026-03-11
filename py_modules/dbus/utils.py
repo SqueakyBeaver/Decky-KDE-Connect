@@ -20,5 +20,5 @@ def marshall_str(s: str, align: int) -> bytes:
     :param s: The string to marshall
     :param align: The alignment of the string
     """
-    str_len = len(s).to_bytes(align)
+    str_len = len(s).to_bytes(align, "little")
     return str_len + s.encode() + b"\0"
