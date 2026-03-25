@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from enum import Flag, IntEnum
+from enum import IntEnum, IntFlag
 from typing import Any
 
 from dbus.signatures import (
@@ -22,7 +22,7 @@ class MessageType(IntEnum):
     SIGNAL = 0x4
 
 
-class MessageFlag(Flag):
+class MessageFlag(IntFlag):
     NONE = 0x0
     NO_REPLY_EXPECTED = 0x1
     NO_AUTO_START = 0x2
@@ -84,13 +84,59 @@ class MessageHeader:
             ]
         )
 
-        self.buffer += self.msg_length.to_bytes(4, "little") + self.serial.to_bytes(4, "little")
+        self.buffer += self.msg_length.to_bytes(4, "little") + self.serial.to_bytes(
+            4, "little"
+        )
 
         self.buffer += Dictionary(Byte(), Variant(), pad_arr_length=False).pack(
             self.header_fields
         )
 
         self.align(8)
+
+    @classmethod
+    def decode(cls, buf: bytes):
+        """
+        Decode a byte string into a message header
+
+        :param buf: The bytes to decode
+        :returns: The MessageHeader object and the bytes after the message header
+        """
+        """
+        Example:
+        l \x02 \x01 \x01 
+        \x0b \x00 \x00 \x00 
+        \x01 \x00 \x00 \x00
+        
+        Header Fields:
+        Size: \x3d \x00 \x00 \x00 {
+            \x06: \x01s\x00 \x06\x00\x00\x00 :1.396\x00
+            \x00
+            \x05: \x01u\x00 \x01\x00\x00\x00
+            \x08: \x01g\x00 \x01s\x00
+            \x00
+            \x07: \x01s\x00 \x14\x00\x00\x00 org.freedesktop.DBus\x00
+        }
+        """
+
+        endianness = buf[0]
+        byteorder = "big" if endianness == b"B" else "little"
+
+        msg_type = MessageType(buf[1])
+        msg_flags = MessageFlag(buf[2])
+        protocol_ver = buf[3]
+
+        body_len = int.from_bytes(buf[4:8], byteorder)
+        serial = buf[8:12]
+
+        # The length is only 4 bytes bc the buffer is at an 8 byte barrier
+        field_len = int.from_bytes(buf[12:16], byteorder)
+        field_buf = buf[16 : 16 + field_len]
+
+        fields: dict[str, Any] = {}
+
+        while field_buf:
+            field_type = HeaderField(buf[0])
 
 
 @dataclass
@@ -182,3 +228,51 @@ class Message:
         self.header.marshall()
 
         return self.header.buffer + self.body.buffer
+
+    @classmethod
+    def decode(cls, buf: bytes):
+        """
+        Decode one message from a given byte string
+
+        :param buf: The bytes to parse
+        :returns: The byte string after the message that was decoded
+        """
+        """
+        Example:
+        l \x02 \x01 \x01 
+        \x0b \x00 \x00 \x00 
+        \x01 \x00 \x00 \x00
+        
+        Header Fields:
+        Size: \x3d \x00 \x00 \x00 {
+            \x06: \x01s\x00 \x06\x00\x00\x00 :1.396\x00
+            \x00
+            \x05: \x01u\x00 \x01\x00\x00\x00
+            \x08: \x01g\x00 \x01s\x00
+            \x00
+            \x07: \x01s\x00 \x14\x00\x00\x00 org.freedesktop.DBus\x00
+        }
+        Body:
+        \x06\x00\x00\x00 :1.396\x00
+        
+        Signal:
+        l \x04 \x01 \x01 
+        \x0b\x00\x00\x00
+        \x02\x00\x00\x00
+
+        \x8d\x00\x00\x00 {
+            \x01: \x01o\x00 \x15\x00\x00\x00 /org/freedesktop/DBus\x00
+            \x00\x00
+            \x02: \x01s\x00 \x14\x00\x00\x00 org.freedesktop.DBus\x00 
+            \x00\x00\x00
+            \x03: \x01s\x00 \x0c\x00\x00\x00 NameAcquired\x00
+            \x00\x00\x00
+            \x06: \x01s\x00 \x06\x00\x00\x00 :1.396\x00
+            \x00
+            \x08: \x01g\x00 \x01s\x00 
+            \x00
+            \x07: \x01s\x00 \x14\x00\x00\x00 org.freedesktop.DBus\x00
+            \x00\x00\x00
+        }
+        \x06\x00\x00\x00 :1.396\x00'
+        """

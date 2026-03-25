@@ -1,13 +1,18 @@
 from abc import ABC, abstractmethod
+from functools import lru_cache
 from struct import Struct as CStruct
-from typing import Any, override
+from typing import Any, Literal, Optional, override
 
-from .utils import align_buf, marshall_str
+from dbus.utils import align_buf, marshall_str
 
 
 class DBusType(ABC):
     dbus_code: str
     align: int
+    byteorder: Literal["little", "big"]
+
+    def __init__(self, byteorder: Literal["little", "big"] = "little"):
+        self.byteorder = byteorder
 
     @abstractmethod
     def is_valid(self, val: Any) -> bool:
@@ -18,53 +23,47 @@ class DBusType(ABC):
         pass
 
     @abstractmethod
+    def decode(self, buf: bytes) -> Any:
+        pass
+
+    @abstractmethod
     def to_dbus_str(self) -> str:
-        """
-        Get the DBus signature string of this type
-        """
         pass
 
 
 class DBusBasicType(DBusType):
-    _value: Any = None
-
-    @property
-    def value(self):
-        return self._value
-
-    @value.setter
-    def value(self, val: Any):
-        if self.is_valid(val):
-            self._value = val
-        else:
-            raise ValueError(f"{val} is not valid on class {self}")
-
     def __repr__(self) -> str:
         return f"<{type(self).__name__} ({self.dbus_code})>"
 
     def to_dbus_str(self) -> str:
-        """
-        Get the DBus signature string of this type
-        """
         return self.dbus_code
 
 
 class DBusNumericType(DBusBasicType):
-    struct_code: str
     _packer = CStruct("<B")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        if self.byteorder == "big":
+            self._packer.format.replace("<", ">")
 
     def pack(self, data: int):
         return self._packer.pack(data)
 
+    def decode(self, buf: bytes):
+        return self._packer.unpack(buf[: self.align])[0]
+
 
 class DBusStringType(DBusBasicType):
-    def pack(self, data: str):
-        """
-        Turn string data into a set of bytes
+    python_type = str
 
-        :param data: The string to pack
-        """
-        return marshall_str(data, self.align)
+    def pack(self, data: str):
+        return marshall_str(data, self.align, self.byteorder)
+
+    def decode(self, buf: bytes):
+        size = buf[0]
+        return buf[1 : size + 1].decode()
 
 
 class DBusContainerType(DBusType):
@@ -79,10 +78,8 @@ class Invalid(DBusBasicType):
 class Byte(DBusNumericType):
     dbus_code = "y"
     align = 1
-    _value: int
     _packer = CStruct("<B")
 
-    @override
     def is_valid(self, val: Any):
         return isinstance(val, int) and val.bit_length() <= 8
 
@@ -90,7 +87,6 @@ class Byte(DBusNumericType):
 class Boolean(DBusNumericType):
     dbus_code = "b"
     align = 4
-    _value: bool | int
     _packer = CStruct("<I")
 
     def is_valid(self, val: Any):
@@ -100,7 +96,6 @@ class Boolean(DBusNumericType):
 class Int16(DBusNumericType):
     dbus_code = "n"
     align = 2
-    _value: int
     _packer = CStruct("<h")
 
     def is_valid(self, val: Any) -> bool:
@@ -110,7 +105,6 @@ class Int16(DBusNumericType):
 class UInt16(DBusNumericType):
     dbus_code = "q"
     align = 2
-    _value: int
     _packer = CStruct("<H")
 
     def is_valid(self, val: Any) -> bool:
@@ -120,7 +114,6 @@ class UInt16(DBusNumericType):
 class Int32(DBusNumericType):
     dbus_code = "i"
     align = 4
-    _value: int
     _packer = CStruct("<i")
 
     def is_valid(self, val: Any) -> bool:
@@ -130,7 +123,6 @@ class Int32(DBusNumericType):
 class UInt32(DBusNumericType):
     dbus_code = "u"
     align = 4
-    _value: int
     _packer = CStruct("<I")
 
     def is_valid(self, val: Any) -> bool:
@@ -140,7 +132,6 @@ class UInt32(DBusNumericType):
 class Int64(DBusNumericType):
     dbus_code = "x"
     align = 8
-    _value: int
     _packer = CStruct("<q")
 
     def is_valid(self, val: Any) -> bool:
@@ -150,7 +141,6 @@ class Int64(DBusNumericType):
 class UInt64(DBusNumericType):
     dbus_code = "t"
     align = 8
-    _value: int
     _packer = CStruct("<Q")
 
     def is_valid(self, val: Any) -> bool:
@@ -160,26 +150,18 @@ class UInt64(DBusNumericType):
 class Double(DBusNumericType):
     dbus_code = "d"
     align = 8
-    _value: float
     _packer = CStruct("<d")
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, float) or isinstance(val, int)
 
-    @override
     def pack(self, data: float) -> bytes:
-        """
-        Turn a given float into bytes
-
-        :param data: The float to pack
-        """
         return self._packer.pack(data)
 
 
 class String(DBusStringType):
     dbus_code = "s"
     align = 4
-    _value: str
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, str)
@@ -188,7 +170,6 @@ class String(DBusStringType):
 class ObjectPath(DBusStringType):
     dbus_code = "o"
     align = 4
-    _value: str
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, str)
@@ -197,49 +178,54 @@ class ObjectPath(DBusStringType):
 class Signature(DBusStringType):
     dbus_code = "g"
     align = 1
-    _value: str
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, str) and len(val) < 256
 
 
-class Array[T: DBusType](DBusContainerType, list):
+class Array(DBusContainerType, list):
     dbus_code = "a"
     align = 4
-    align_elem: int
+    child: DBusType
 
-    def __init__(self, elem_type: T):
-        self.elem_type = elem_type
-        self.pack_elem = elem_type.pack
-        self.align_elem = elem_type.align
+    def __init__(self, child: DBusType, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.child = child
 
-    def pack(self, data: list[T]) -> bytes:
+    def pack(self, data: list[Any]) -> bytes:
         buf = bytearray()
 
         for i in data:
-            buf += self.pack_elem(i)
+            buf += self.child.pack(i)
 
-        return bytes(align_buf(len(buf).to_bytes(4, "little"), self.align_elem) + buf)
+        return bytes(align_buf(len(buf).to_bytes(4, "little"), self.child.align) + buf)
+
+    def decode(self, buf: bytes):
+        size = int.from_bytes(buf[:4], self.byteorder)
+        buf = buf[4 + self.child.align:]
+        
+        ret = []
+
+
 
     def is_valid(self, val):
         return True
 
     def to_dbus_str(self) -> str:
-        return f"a{self.elem_type.dbus_code}"
+        return f"a{self.child.to_dbus_str()}"
 
     def __repr__(self):
-        return f"<Array [{self.elem_type}]>"
+        return f"<Array [{self.child}]>"
 
 
 class Struct(DBusContainerType):
     dbus_code = "("
-    end_dbus_code = ")"
     align = 8
+    children: list[DBusType]
 
-    def __init__(self, *contents: DBusType):
-        self.contents = contents
-        self.packers = [c.pack for c in contents]
-        self.child_align = tuple([i.align for i in contents])  # type: ignore
+    def __init__(self, *children: DBusType, **kwargs):
+        super().__init__(**kwargs)
+        self.children = list(children)
 
     def is_valid(self, val: Any) -> bool:
         # TODO: Check type (I'm lazy)
@@ -248,31 +234,37 @@ class Struct(DBusContainerType):
     def pack(self, data: tuple[Any, ...]) -> bytes:
         buf = bytearray()
 
-        for pack, i in zip(self.packers, data):
-            buf += pack(i)
+        for child, i in zip(self.children, data):
+            buf += child.pack(i)
 
         return bytes(buf)
 
+    def decode(self, buf: bytes):
+        pass
+
     def to_dbus_str(self) -> str:
-        return f"({''.join([c.dbus_code for c in self.contents])})"  # type: ignore
+        return f"({''.join([c.to_dbus_str() for c in self.children])})"
+
+    def add_child(self, t: DBusType):
+        self.children.append(t)
 
     def __repr__(self):
-        return f"<Struct({','.join([str(i) for i in self.contents])})"
+        return f"<Struct({','.join([str(i) for i in self.children])})"
 
 
-class Variant[T: DBusType](DBusContainerType):
+class Variant(DBusBasicType):
     dbus_code = "v"
     align = 1
-    type: T
+    type: DBusType
     signature: str
 
-    def __init__(self, type: T | None = None):
-
+    def __init__(self, type: DBusType | None = None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         if type:
             self.type = type
             self.signature = type.to_dbus_str()
 
-    def set_type(self, type: T):
+    def set_type(self, type: DBusType):
         self.type = type
         self.signature = type.to_dbus_str()
 
@@ -285,14 +277,13 @@ class Variant[T: DBusType](DBusContainerType):
             self.set_type(t)
 
         buf = bytes(
-            marshall_str(self.signature, 1)
-            + self.type.pack(data)
+            marshall_str(self.signature, 1, self.byteorder) + self.type.pack(data)
         )
 
         return buf
 
-    def to_dbus_str(self) -> str:
-        return self.dbus_code
+    def decode(self, buf: bytes):
+        pass
 
 
 class Dictionary(DBusContainerType):
@@ -300,19 +291,22 @@ class Dictionary(DBusContainerType):
     Equivalent to the DBus type a{__}
     """
 
-    dbus_code = "{"
-    end_dbus_code = "}"
     align = 8
     key: DBusBasicType
     value: DBusType
 
     def __init__(
         self,
-        k_type: DBusBasicType,
+        k_type: DBusType,
         v_type: DBusType,
-        *,
         pad_arr_length: bool = True,
+        *args,
+        **kwargs,
     ):
+        super().__init__(*args, **kwargs)
+        if not isinstance(k_type, DBusBasicType):
+            raise TypeError(f"Invalid DBus dictionary key type: {k_type}")
+
         self.key = k_type
         self.value = v_type
         self.pad_arr_length = pad_arr_length
@@ -331,28 +325,37 @@ class Dictionary(DBusContainerType):
             buf += self.pack_elem((k, v))
 
         return bytes(
-            len(buf).to_bytes(4, "little") + (b"\0\0\0\0" if self.pad_arr_length else b"") + buf
+            len(buf).to_bytes(4, "little")
+            + (b"\0\0\0\0" if self.pad_arr_length else b"")
+            + buf
         )
 
+    def decode(self, buf: bytes):
+        pass
+
     def to_dbus_str(self) -> str:
-        return f"a{{{self.key.dbus_code}{self.value.dbus_code}}}"
+        return f"a{{{self.key.to_dbus_str()}{self.value.to_dbus_str()}}}"
 
     def __repr__(self) -> str:
         return f"<Dictionary{{{self.key}: {self.value}}}"
 
 
+# TODO: Figure out how/if I should use this
 class UnixFD(DBusBasicType):
     dbus_code = "h"
     align = 4
-    _value: str
+
+    def pack(self, data: Any) -> bytes:
+        return super().pack(data)
+
+    def decode(self, buf: bytes) -> Any:
+        return super().decode(buf)
 
     def is_valid(self, val: Any) -> bool:
         return isinstance(val, str)
 
 
-# Keeping these just in case I need them
-# I probably won't though
-NUMERIC_TYPES: dict[str, type[DBusType]] = {
+NUMERIC_TYPES = {
     "y": Byte,
     "b": Boolean,
     "n": Int16,
@@ -362,20 +365,91 @@ NUMERIC_TYPES: dict[str, type[DBusType]] = {
     "x": Int64,
     "t": UInt64,
     "d": Double,
-}
-STRING_TYPES = {
-    "s": String,
-    "o": ObjectPath,
-    "g": Signature,
-}
-CONTAINER_TYPES = {
-    "a": Array,
-    "(": Struct,
-    "{": Dictionary,
-}
-OTHER_TYPES = {
     "v": Variant,
-    "h": UnixFD,
 }
+STRING_TYPES = {"s": String, "o": ObjectPath, "g": Signature}
+CONTAINER_TYPES = {"a": Array, "(": Struct, "{": Dictionary}
+OTHER_TYPES = {"h": UnixFD}
+BASIC_TYPES = NUMERIC_TYPES | STRING_TYPES
+DBUS_TYPES = NUMERIC_TYPES | STRING_TYPES | CONTAINER_TYPES | OTHER_TYPES
 
-TYPES = NUMERIC_TYPES | STRING_TYPES | CONTAINER_TYPES | OTHER_TYPES
+
+class SignatureParser:
+    def __init__(self, sig_str: Optional[str]):
+        self.types_list: list[DBusType] = []
+
+        if sig_str:
+            self.parse(sig_str)
+
+    @lru_cache
+    def parse(self, sig_str: str):
+        self.signature = sig_str
+
+        _signature = sig_str
+        while _signature:
+            (_type, _signature) = self._parse_next(_signature)
+            self.types_list.append(_type)
+
+        return self.types_list
+
+    def _parse_next(self, sig_str: str) -> tuple[DBusType, str]:
+        """
+        Parse a DBus signature string into a list of DBusType objects
+
+        :param sig_str: The signature string to parse
+        :param container_stack: The stack of container opening symbols. Used internally
+        """
+        if not sig_str:
+            raise ValueError(
+                f"Attempted to parse empty signature (whole signature: {self.signature})"
+            )
+
+        tok = sig_str[0]
+
+        if tok not in DBUS_TYPES:
+            raise ValueError(f"Invalid token {tok} in signature {self.signature}")
+
+        _signature = sig_str[1:]
+        if tok == "a" and sig_str[1] == "{":
+            # Skip the "{"
+            _signature = _signature[1:]
+
+            (key, _signature) = self._parse_next(_signature)
+            (val, _signature) = self._parse_next(_signature)
+
+            if not key or not isinstance(key, DBusBasicType):
+                raise ValueError(
+                    f"Invalid or missing dictionary key type in signature {self.signature}"
+                )
+            if not val:
+                raise ValueError(
+                    f"Missing dictionary value type in signature {self.signature}"
+                )
+
+            if _signature[0] != "}":
+                raise ValueError(
+                    f"Missing closing '}}' or improper dictionary value in signature {self.signature}"
+                )
+
+            # Skip the closing "}"
+            return (Dictionary(key, val), _signature[1:])
+        elif tok == "a":
+            (child, _signature) = self._parse_next(_signature)
+
+            return (Array(child), _signature)
+        elif tok == "(":
+            types: list[DBusType] = []
+
+            while _signature[0] != ")":
+                if not _signature:
+                    raise ValueError(
+                        f"Missing closing ')' in signature {self.signature}"
+                    )
+
+                (_type, _signature) = self._parse_next(_signature)
+                types.append(_type)
+
+            # Skip the ")"
+            return (Struct(*types), _signature[1:])
+
+        return (DBUS_TYPES[tok](), _signature)

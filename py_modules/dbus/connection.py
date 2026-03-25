@@ -1,5 +1,3 @@
-from asyncio import sleep
-import asyncio
 import os
 from socket import AF_UNIX, SOCK_STREAM, socket
 
@@ -14,7 +12,6 @@ class DBusConnection:
         self._sock = socket(AF_UNIX, SOCK_STREAM)
         self._sock.connect(self._session_bus_path)
 
-        # Perform D-Bus authentication handshake
         self._authenticate()
 
     def _authenticate(self):
@@ -45,9 +42,6 @@ class DBusConnection:
 
         res = self.send(msg)
 
-        print(res)
-
-
     def send(self, msg: Message):
         """
         Simple send to bus
@@ -58,7 +52,7 @@ class DBusConnection:
 
         self._sock.sendall(b)
 
-        return self._sock.recv(2048)
+        return self._sock.recv(4096)
 
 
 _connection: DBusConnection | None = None
