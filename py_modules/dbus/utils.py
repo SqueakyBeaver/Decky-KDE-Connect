@@ -1,3 +1,4 @@
+from io import BytesIO
 from typing import Literal
 
 
@@ -25,3 +26,19 @@ def marshall_str(s: str, align: int, byteorder: Literal["little", "big"]) -> byt
     """
     str_len = len(s).to_bytes(align, byteorder)
     return str_len + s.encode() + b"\0"
+
+
+def skip_padding(buf: BytesIO, align: int) -> bytes:
+    """
+    Skip padding in buf to get to the alignment boundary
+
+    :param buf: The buffer to look at
+    :param align: The alignment boundary
+
+    :returns: The bytes that were skipped
+    """
+    padding = align - (buf.tell() % align)
+    if padding == align or padding == 0:
+        return b""
+
+    return buf.read(padding)

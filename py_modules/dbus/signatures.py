@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 from functools import lru_cache
+from io import BytesIO
 from struct import Struct as CStruct
 from typing import Any, Literal, Optional, override
 
-from dbus.utils import align_buf, marshall_str
+from dbus.utils import align_buf, marshall_str, skip_padding
 
 
 class DBusType(ABC):
@@ -31,11 +32,11 @@ class DBusType(ABC):
         pass
 
     @abstractmethod
-    def decode(self, buf: bytes) -> tuple[Any, int]:
+    def decode(self, buf: BytesIO) -> Any:
         """
         Convert a set of bytes into a python type corresponding to this dbus type
 
-        :returns: A tuple of the form (value, number of bytes used)
+        :returns: A python value associated with the DBus type
         """
         pass
 
@@ -75,8 +76,8 @@ class DBusNumericType(DBusBasicType):
     def pack(self, data: int):
         return self._packer.pack(data)
 
-    def decode(self, buf: bytes):
-        return (self._packer.unpack(buf[: self.align])[0], self.align)
+    def decode(self, buf: BytesIO):
+        return self._packer.unpack(buf.read(self.align))[0]
 
 
 class DBusStringType(DBusBasicType):
@@ -85,10 +86,11 @@ class DBusStringType(DBusBasicType):
     def pack(self, data: str):
         return marshall_str(data, self.align, self.byteorder)
 
-    def decode(self, buf: bytes):
-        size = int.from_bytes(buf[: self.align], self.byteorder)
+    def decode(self, buf: BytesIO):
+        size = int.from_bytes(buf.read(self.align), self.byteorder)
 
-        return (buf[self.align : size + self.align].decode(), self.align + size + 1)
+        # The null character isn't part of the size
+        return buf.read(size + 1).decode()[:-1]
 
 
 class DBusContainerType(DBusType):
@@ -226,29 +228,18 @@ class Array(DBusContainerType, list):
 
         return bytes(align_buf(len(buf).to_bytes(4, "little"), self.child.align) + buf)
 
-    def decode(self, buf: bytes):
-        size = int.from_bytes(buf[:4], self.byteorder)
-        buf = buf[4 + (4 % self.child.align) :]
+    def decode(self, buf: BytesIO):
+        size = int.from_bytes(buf.read(4), self.byteorder)
 
         ret = []
-        consumed = 0
-        while consumed < size:
-            (val, used) = self.child.decode(buf)
+        stop = buf.tell() + size
+        while buf.tell() < stop:
+            val = self.child.decode(buf)
             ret.append(val)
 
-            padding = self.child.align - (used % self.child.align)
-            if (
-                padding != self.child.align
-                and padding != 0
-                # FIXME: This is a temporary workaround for message headers and will break stuff
-                and buf[used : used + padding] == b"\x00" * padding
-            ):
-                used += padding
+            skip_padding(buf, self.child.align)
 
-            consumed += used
-            buf = buf[used:]
-
-        return (ret, consumed + (4 % self.child.align))
+        return ret
 
     def is_valid(self, val):
         return True
@@ -281,16 +272,13 @@ class Struct(DBusContainerType):
 
         return bytes(buf)
 
-    def decode(self, buf: bytes):
-        consumed = 0
+    def decode(self, buf: BytesIO):
         ret = []
         for child in self.children:
-            (val, used) = child.decode(buf)
+            val = child.decode(buf)
             ret.append(val)
-            buf = buf[used:]
-            consumed += used
 
-        return (tuple(ret), consumed)
+        return tuple(ret)
 
     def to_dbus_str(self) -> str:
         return f"({''.join([c.to_dbus_str() for c in self.children])})"
@@ -334,17 +322,15 @@ class Variant(DBusBasicType):
 
         return buf
 
-    def decode(self, buf: bytes):
-        sig, used_sig = Signature(self.byteorder).decode(buf)
+    def decode(self, buf: BytesIO):
+        sig = Signature(self.byteorder).decode(buf)
 
         # Always change the type because
         # if the type a was a string before, it could be an int32 now
         # TODO: Make this line better
         self.set_type(SignatureParser(sig).types_list[0])
 
-        buf = buf[used_sig:]
-        (val, used) = self.type.decode(buf)
-        return (val, used + used_sig)
+        return self.type.decode(buf)
 
 
 class Dictionary(DBusContainerType):
@@ -395,14 +381,14 @@ class Dictionary(DBusContainerType):
             + buf
         )
 
-    def decode(self, buf: bytes):
+    def decode(self, buf: BytesIO):
         arr = Array(
             Struct(self.key, self.value, byteorder=self.byteorder), self.byteorder
         )
 
-        ret, used = arr.decode(buf)
+        ret = arr.decode(buf)
 
-        return (dict(ret), used)
+        return dict(ret)
 
     def to_dbus_str(self) -> str:
         return f"a{{{self.key.to_dbus_str()}{self.value.to_dbus_str()}}}"
@@ -419,7 +405,7 @@ class UnixFD(DBusBasicType):
     def pack(self, data: Any) -> bytes:
         return super().pack(data)
 
-    def decode(self, buf: bytes) -> Any:
+    def decode(self, buf: BytesIO) -> Any:
         return super().decode(buf)
 
     def is_valid(self, val: Any) -> bool:
@@ -530,6 +516,8 @@ if __name__ == "__main__":
     x = Dictionary(Byte(), Variant(), byteorder="little")
     print(
         x.decode(
-            b"\x3d\x00\x00\x00\x00\x00\x00\x00\x06\x01s\x00\x06\x00\x00\x00:1.396\x00\x00\x05\x01u\x00\x01\x00\x00\x00\x08\x01g\x00\x01s\x00\x00\x07\x01s\x00\x14\x00\x00\x00org.freedesktop.DBus\x00"
+            BytesIO(
+                b"\x3d\x00\x00\x00\x00\x00\x00\x00\x06\x01s\x00\x06\x00\x00\x00:1.396\x00\x00\x05\x01u\x00\x01\x00\x00\x00\x08\x01g\x00\x01s\x00\x00\x07\x01s\x00\x14\x00\x00\x00org.freedesktop.DBus\x00"
+            )
         )
     )

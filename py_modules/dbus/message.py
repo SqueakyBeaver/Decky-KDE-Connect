@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 from enum import IntEnum, IntFlag
+from io import BytesIO
 from typing import Any
 
 from dbus.signatures import (
@@ -95,7 +96,7 @@ class MessageHeader:
         self.align(8)
 
     @classmethod
-    def decode(cls, buf: bytes):
+    def decode(cls, buf: BytesIO):
         """
         Decode a byte string into a message header
 
@@ -118,19 +119,17 @@ class MessageHeader:
             \x07: \x01s\x00 \x14\x00\x00\x00 org.freedesktop.DBus\x00
         }
         """
-
-        endianness = buf[0]
+        endianness = buf.read(1)
         byteorder = "big" if endianness == b"B" else "little"
 
-        msg_type = MessageType(buf[1])
-        msg_flags = MessageFlag(buf[2])
-        protocol_ver = buf[3]
+        msg_type = MessageType.from_bytes(buf.read(1))
+        msg_flags = MessageFlag.from_bytes(buf.read(1))
+        protocol_ver = int.from_bytes(buf.read(1))
 
-        body_len = int.from_bytes(buf[4:8], byteorder)
-        serial = buf[8:12]
+        body_len = int.from_bytes(buf.read(4), byteorder)
+        serial = int.from_bytes(buf.read(4), byteorder)
 
-        print(buf[12:])
-        field_dict = Dictionary(Byte(), Variant(), byteorder=byteorder).decode(buf[12:])
+        field_dict = Dictionary(Byte(), Variant(), byteorder=byteorder).decode(buf)
 
         print(field_dict)
 
@@ -229,11 +228,11 @@ class Message:
         return self.header.buffer + self.body.buffer
 
     @classmethod
-    def decode(cls, buf: bytes):
+    def decode(cls, msg_bytes: bytes):
         """
         Decode one message from a given byte string
 
-        :param buf: The bytes to parse
+        :param msg_bytes: The bytes to parse
         :returns: The byte string after the message that was decoded
         """
         """
@@ -275,6 +274,8 @@ class Message:
         }
         \x06\x00\x00\x00 :1.396\x00'
         """
+        buf = BytesIO(msg_bytes)
+
         header = MessageHeader.decode(buf)
 
 
