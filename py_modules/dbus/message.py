@@ -129,14 +129,10 @@ class MessageHeader:
         body_len = int.from_bytes(buf[4:8], byteorder)
         serial = buf[8:12]
 
-        # The length is only 4 bytes bc the buffer is at an 8 byte barrier
-        field_len = int.from_bytes(buf[12:16], byteorder)
-        field_buf = buf[16 : 16 + field_len]
+        print(buf[12:])
+        field_dict = Dictionary(Byte(), Variant(), byteorder=byteorder).decode(buf[12:])
 
-        fields: dict[str, Any] = {}
-
-        while field_buf:
-            field_type = HeaderField(buf[0])
+        print(field_dict)
 
 
 @dataclass
@@ -169,6 +165,9 @@ _serial = 1
 
 
 class Message:
+    header: MessageHeader
+    body: MessageBody
+
     def __init__(
         self,
         *,
@@ -276,3 +275,10 @@ class Message:
         }
         \x06\x00\x00\x00 :1.396\x00'
         """
+        header = MessageHeader.decode(buf)
+
+
+if __name__ == "__main__":
+    Message.decode(
+        b"l\x02\x01\x01\x0b\x00\x00\x00\x01\x00\x00\x00\x3d\x00\x00\x00\x06\x01s\x00\x06\x00\x00\x00:1.396\x00\x00\x05\x01u\x00\x01\x00\x00\x00\x08\x01g\x00\x01s\x00\x00\x07\x01s\x00\x14\x00\x00\x00org.freedesktop.DBus\x00\x06\x00\x00\x00:1.396\x00"
+    )
